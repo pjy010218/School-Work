@@ -1,3 +1,3 @@
-# Portfolio
+# School Work
 
-<body>Any code that I've written or used, they should be here.</body>
+<body>Any code that I've studied, they should be here.</body>
