@@ -4,6 +4,47 @@ import random
 import threading
 import math
 
+# --- Helper Class for Scrollable GUI ---
+
+class ScrollableFrame(ttk.Frame):
+    """A scrollable frame that can hold other widgets."""
+    def __init__(self, container, *args, **kwargs):
+        super().__init__(container, *args, **kwargs)
+        canvas = tk.Canvas(self)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = ttk.Frame(canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Bind mouse wheel for scrolling (cross-platform)
+        def _on_mousewheel(event):
+            # For Windows and MacOS
+            if event.delta:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            # For Linux
+            else:
+                if event.num == 5:
+                    canvas.yview_scroll(1, "units")
+                elif event.num == 4:
+                    canvas.yview_scroll(-1, "units")
+        
+        # Bind events to the entire window to ensure scrolling works
+        container.bind_all("<MouseWheel>", _on_mousewheel)
+        container.bind_all("<Button-4>", _on_mousewheel)
+        container.bind_all("<Button-5>", _on_mousewheel)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+
 # --- Cryptographic Functions ---
 
 def is_prime(n, k=5):
@@ -42,7 +83,7 @@ class RsaGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("RSA Cryptosystem & Attacker Simulation")
-        self.geometry("800x900")
+        self.geometry("800x750")
 
         # RSA parameters
         self.p, self.q, self.n, self.phi_n, self.e, self.d = (None,) * 6
@@ -51,12 +92,14 @@ class RsaGUI(tk.Tk):
         self.create_widgets()
 
     def create_widgets(self):
-        main_frame = ttk.Frame(self, padding="10")
-        main_frame.pack(fill="both", expand=True)
+        # Use the ScrollableFrame as the main container
+        scroll_container = ScrollableFrame(self)
+        scroll_container.pack(fill="both", expand=True)
+        main_frame = scroll_container.scrollable_frame
 
         # --- Part 1: RSA Protocol ---
         protocol_frame = ttk.Frame(main_frame)
-        protocol_frame.pack(fill="x", expand=True)
+        protocol_frame.pack(fill="x", expand=True, padx=10, pady=5)
 
         key_gen_frame = ttk.LabelFrame(protocol_frame, text="1. Alice Generates RSA Keys")
         key_gen_frame.pack(fill="x", padx=5, pady=5)
@@ -65,7 +108,8 @@ class RsaGUI(tk.Tk):
         size_frame.pack(fill='x', padx=5, pady=5)
         ttk.Label(size_frame, text="Select Modulus Key Size (bits for n):").pack(side="left", padx=5)
         self.key_size_var = tk.StringVar(value='128')
-        key_size_options = ["16", "32", "64", "128", "256", "512", "1024"]
+        # ADDED 2048 to key sizes
+        key_size_options = ["16", "32", "64", "128", "256", "512", "1024", "2048"]
         self.key_size_menu = ttk.Combobox(size_frame, textvariable=self.key_size_var, values=key_size_options, width=10)
         self.key_size_menu.pack(side="left", padx=5)
         self.generate_keys_button = ttk.Button(size_frame, text="Generate Keys", command=self.start_generate_keys_thread)
@@ -73,17 +117,17 @@ class RsaGUI(tk.Tk):
 
         results_frame = ttk.Frame(key_gen_frame)
         results_frame.pack(fill='x', padx=5, pady=5)
-        self.p_label = ttk.Label(results_frame, text="Prime p: (secret)", wraplength=750, foreground="red")
+        self.p_label = ttk.Label(results_frame, text="Prime p: (secret)", wraplength=700, foreground="red")
         self.p_label.pack(anchor="w", padx=5)
-        self.q_label = ttk.Label(results_frame, text="Prime q: (secret)", wraplength=750, foreground="red")
+        self.q_label = ttk.Label(results_frame, text="Prime q: (secret)", wraplength=700, foreground="red")
         self.q_label.pack(anchor="w", padx=5)
-        self.n_label = ttk.Label(results_frame, text="Modulus n (p*q):", wraplength=750)
+        self.n_label = ttk.Label(results_frame, text="Modulus n (p*q):", wraplength=700)
         self.n_label.pack(anchor="w", padx=5)
-        self.phi_label = ttk.Label(results_frame, text="Phi(n) (p-1)*(q-1): (secret)", wraplength=750, foreground="red")
+        self.phi_label = ttk.Label(results_frame, text="Phi(n) (p-1)*(q-1): (secret)", wraplength=700, foreground="red")
         self.phi_label.pack(anchor="w", padx=5)
-        self.e_label = ttk.Label(results_frame, text="Public Exponent (e):", wraplength=750)
+        self.e_label = ttk.Label(results_frame, text="Public Exponent (e):", wraplength=700)
         self.e_label.pack(anchor="w", padx=5)
-        self.d_label = ttk.Label(results_frame, text="Private Exponent (d): (secret)", wraplength=750, foreground="red")
+        self.d_label = ttk.Label(results_frame, text="Private Exponent (d): (secret)", wraplength=700, foreground="red")
         self.d_label.pack(anchor="w", padx=5)
         
         encrypt_frame = ttk.LabelFrame(protocol_frame, text="2. Bob Encrypts a Message")
@@ -109,12 +153,12 @@ class RsaGUI(tk.Tk):
 
         # --- Part 2: Attacker's View ---
         attacker_frame = ttk.LabelFrame(main_frame, text="Attacker's View", relief="ridge")
-        attacker_frame.pack(fill="x", expand=True, padx=5, pady=(15, 5))
+        attacker_frame.pack(fill="x", expand=True, padx=10, pady=(15, 5))
         
         ttk.Label(attacker_frame, text="Information the Attacker Intercepts:", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=5)
-        self.attacker_n_label = ttk.Label(attacker_frame, text="Public Key n: (waiting)", wraplength=750)
+        self.attacker_n_label = ttk.Label(attacker_frame, text="Public Key n: (waiting)", wraplength=700)
         self.attacker_n_label.pack(anchor="w", padx=10)
-        self.attacker_e_label = ttk.Label(attacker_frame, text="Public Key e: (waiting)", wraplength=750)
+        self.attacker_e_label = ttk.Label(attacker_frame, text="Public Key e: (waiting)", wraplength=700)
         self.attacker_e_label.pack(anchor="w", padx=10)
         self.attacker_ciphertext_label = ttk.Label(attacker_frame, text="Ciphertext: (waiting)")
         self.attacker_ciphertext_label.pack(anchor="w", padx=10, pady=(5,0))
@@ -166,7 +210,6 @@ class RsaGUI(tk.Tk):
             
             e = 65537
             if math.gcd(e, phi_n) != 1:
-                # Find another e if 65537 is not suitable (rare for large primes)
                 e = 3
                 while math.gcd(e, phi_n) != 1:
                     e += 2
@@ -180,7 +223,6 @@ class RsaGUI(tk.Tk):
     def update_rsa_ui(self, p, q, n, phi_n, e, d):
         self.p, self.q, self.n, self.phi_n, self.e, self.d = p, q, n, phi_n, e, d
         
-        # Alice's View
         self.p_label.config(text=f"Prime p: {p} (secret)")
         self.q_label.config(text=f"Prime q: {q} (secret)")
         self.n_label.config(text=f"Modulus n (p*q): {n}")
@@ -188,7 +230,6 @@ class RsaGUI(tk.Tk):
         self.e_label.config(text=f"Public Exponent (e): {e}")
         self.d_label.config(text=f"Private Exponent (d): {d} (secret)")
         
-        # Attacker's View
         self.attacker_n_label.config(text=f"Public Key n: {n}")
         self.attacker_e_label.config(text=f"Public Key e: {e}")
 
@@ -247,7 +288,6 @@ class RsaGUI(tk.Tk):
             return
             
         try:
-            # If factorization is correct, the attacker can derive the private key
             phi_n_guess = (p_guess - 1) * (q_guess - 1)
             d_guess = modular_inverse(self.e, phi_n_guess)
             
@@ -258,7 +298,6 @@ class RsaGUI(tk.Tk):
             self.attacker_result_value.set(f"<DECRYPTION FAILED: {e}>")
 
     def reset_all(self):
-        # Reset protocol view
         self.p_label.config(text="Prime p: (secret)")
         self.q_label.config(text="Prime q: (secret)")
         self.n_label.config(text="Modulus n (p*q):")
@@ -270,7 +309,6 @@ class RsaGUI(tk.Tk):
         for widget in [self.ciphertext_text, self.attacker_ciphertext_text]:
             widget.config(state="normal"); widget.delete(1.0, tk.END); widget.config(state="disabled")
         
-        # Reset attacker view
         self.attacker_n_label.config(text="Public Key n: (waiting)")
         self.attacker_e_label.config(text="Public Key e: (waiting)")
         self.attacker_ciphertext_label.config(text="Ciphertext: (waiting)")
@@ -278,7 +316,6 @@ class RsaGUI(tk.Tk):
         self.attacker_q_guess.delete(0, tk.END)
         self.attacker_result_value.set("")
 
-        # Reset buttons
         self.encrypt_button.config(state="disabled")
         self.decrypt_button.config(state="disabled")
         self.crack_button.config(state="disabled")

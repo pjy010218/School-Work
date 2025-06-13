@@ -3,6 +3,46 @@ from tkinter import ttk, messagebox, scrolledtext
 import random
 import threading
 
+# --- Helper Class for Scrollable GUI ---
+
+class ScrollableFrame(ttk.Frame):
+    """A scrollable frame that can hold other widgets."""
+    def __init__(self, container, *args, **kwargs):
+        super().__init__(container, *args, **kwargs)
+        canvas = tk.Canvas(self)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = ttk.Frame(canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Bind mouse wheel for scrolling (cross-platform)
+        def _on_mousewheel(event):
+            # For Windows and MacOS
+            if event.delta:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            # For Linux
+            else:
+                if event.num == 5:
+                    canvas.yview_scroll(1, "units")
+                elif event.num == 4:
+                    canvas.yview_scroll(-1, "units")
+
+        self.bind_all("<MouseWheel>", _on_mousewheel) # Windows, MacOS
+        self.bind_all("<Button-4>", _on_mousewheel)   # Linux (scroll up)
+        self.bind_all("<Button-5>", _on_mousewheel)   # Linux (scroll down)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+
 # --- Cryptographic Functions ---
 
 def is_prime(n, k=5):
@@ -60,7 +100,7 @@ class ElGamalGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("ElGamal Cryptosystem & Attacker Simulation")
-        self.geometry("750x950") # Increased height for attacker panel
+        self.geometry("800x750") # Set a reasonable default size
 
         # ElGamal parameters
         self.p = None
@@ -73,23 +113,26 @@ class ElGamalGUI(tk.Tk):
         self.create_widgets()
 
     def create_widgets(self):
-        main_frame = ttk.Frame(self, padding="10")
-        main_frame.pack(fill="both", expand=True)
+        # Use the new ScrollableFrame as the main container
+        scroll_container = ScrollableFrame(self)
+        scroll_container.pack(side="top", fill="both", expand=True)
+        main_frame = scroll_container.scrollable_frame
 
         # --- Part 1: ElGamal Protocol ---
         protocol_frame = ttk.Frame(main_frame)
-        protocol_frame.pack(fill="x", expand=True)
+        protocol_frame.pack(fill="x", expand=True, padx=10, pady=5)
 
         key_size_frame = ttk.LabelFrame(protocol_frame, text="1. Choose Key Size")
-        key_size_frame.pack(fill="x", padx=5, pady=5)
+        key_size_frame.pack(fill="x", pady=5)
         ttk.Label(key_size_frame, text="Select Key Size (bits):").pack(side="left", padx=5, pady=5)
         self.key_size_var = tk.StringVar(value='10')
-        key_size_options = ["8", "10", "12", "16", "32", "64", "128", "256", "512"]
+        # ADDED 1024 to key sizes
+        key_size_options = ["8", "10", "12", "16", "32", "64", "128", "256", "512", "1024"]
         self.key_size_menu = ttk.Combobox(key_size_frame, textvariable=self.key_size_var, values=key_size_options, width=10)
         self.key_size_menu.pack(side="left", padx=5, pady=5)
 
         generate_pg_frame = ttk.LabelFrame(protocol_frame, text="2. Generate Global Parameters (g and P)")
-        generate_pg_frame.pack(fill="x", padx=5, pady=5)
+        generate_pg_frame.pack(fill="x", pady=5)
         self.generate_pg_button = ttk.Button(generate_pg_frame, text="Generate", command=self.start_generate_p_and_g_thread)
         self.generate_pg_button.pack(pady=5)
         self.p_label = ttk.Label(generate_pg_frame, text="P (Prime): Not generated", wraplength=700)
@@ -98,7 +141,7 @@ class ElGamalGUI(tk.Tk):
         self.g_label.pack(anchor="w", padx=5)
 
         alice_key_frame = ttk.LabelFrame(protocol_frame, text="3. Alice Generates Her Keys")
-        alice_key_frame.pack(fill="x", padx=5, pady=5)
+        alice_key_frame.pack(fill="x", pady=5)
         self.alice_gen_button = ttk.Button(alice_key_frame, text="Alice Generate Keys", command=self.alice_generate_keys, state="disabled")
         self.alice_gen_button.pack(pady=5)
         self.alice_private_label = ttk.Label(alice_key_frame, text="Alice's PRIVATE Key (d): Not generated", foreground="red", wraplength=700)
@@ -109,27 +152,27 @@ class ElGamalGUI(tk.Tk):
         self.full_pk_label.pack(anchor="w", padx=5, pady=5)
         
         bob_encrypt_frame = ttk.LabelFrame(protocol_frame, text="4. Bob Encrypts and Sends a Message")
-        bob_encrypt_frame.pack(fill="x", padx=5, pady=5)
+        bob_encrypt_frame.pack(fill="x", pady=5)
         ttk.Label(bob_encrypt_frame, text="Enter Message to Encrypt:").pack(anchor="w", padx=5, pady=2)
         self.message_entry = ttk.Entry(bob_encrypt_frame, width=80)
-        self.message_entry.pack(padx=5, pady=2)
+        self.message_entry.pack(padx=5, pady=2, fill='x')
         self.bob_encrypt_button = ttk.Button(bob_encrypt_frame, text="Bob Encrypts", command=self.bob_encrypt_message, state="disabled")
         self.bob_encrypt_button.pack(pady=5)
         ttk.Label(bob_encrypt_frame, text="--> Ciphertext (Y1, Y2) Sent to Alice:").pack(anchor="w", padx=5, pady=2)
         self.ciphertext_text = scrolledtext.ScrolledText(bob_encrypt_frame, height=4, width=80, wrap=tk.WORD, state="disabled")
-        self.ciphertext_text.pack(padx=5, pady=5)
+        self.ciphertext_text.pack(padx=5, pady=5, fill='x', expand=True)
 
         alice_decrypt_frame = ttk.LabelFrame(protocol_frame, text="5. Alice Decrypts the Message")
-        alice_decrypt_frame.pack(fill="x", padx=5, pady=5)
+        alice_decrypt_frame.pack(fill="x", pady=5)
         self.alice_decrypt_button = ttk.Button(alice_decrypt_frame, text="Alice Decrypts", command=self.alice_decrypt_message, state="disabled")
         self.alice_decrypt_button.pack(pady=5)
         self.decrypted_value = tk.StringVar()
         ttk.Label(alice_decrypt_frame, text="Decrypted Message:").pack(anchor="w", padx=5, pady=2)
-        ttk.Entry(alice_decrypt_frame, textvariable=self.decrypted_value, state="readonly", width=80).pack(padx=5, pady=2)
+        ttk.Entry(alice_decrypt_frame, textvariable=self.decrypted_value, state="readonly", width=80).pack(padx=5, pady=2, fill='x')
 
         # --- Part 2: Attacker's View ---
         attacker_frame = ttk.LabelFrame(main_frame, text="Part 2: Attacker's View", relief="ridge")
-        attacker_frame.pack(fill="x", expand=True, padx=5, pady=(15, 5))
+        attacker_frame.pack(fill="x", expand=True, padx=10, pady=(15, 5))
 
         ttk.Label(attacker_frame, text="Information the Attacker Intercepts:", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=5, pady=5)
         self.attacker_info_frame = ttk.Frame(attacker_frame)
@@ -143,19 +186,19 @@ class ElGamalGUI(tk.Tk):
         self.attacker_ciphertext_label = ttk.Label(self.attacker_info_frame, text="Ciphertext: (waiting)")
         self.attacker_ciphertext_label.pack(anchor="w", pady=(5,0))
         self.attacker_ciphertext_text = scrolledtext.ScrolledText(self.attacker_info_frame, height=4, width=80, wrap=tk.WORD, state="disabled")
-        self.attacker_ciphertext_text.pack(pady=(0,5))
+        self.attacker_ciphertext_text.pack(pady=(0,5), fill='x', expand=True)
         
         ttk.Separator(attacker_frame, orient='horizontal').pack(fill='x', pady=5, padx=5)
 
         ttk.Label(attacker_frame, text="Attacker's Decryption Attempt:", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=5, pady=5)
         ttk.Label(attacker_frame, text="Guess Alice's Private Key (d):").pack(anchor="w", padx=10)
         self.attacker_guess_entry = ttk.Entry(attacker_frame, width=80)
-        self.attacker_guess_entry.pack(padx=10, pady=2)
+        self.attacker_guess_entry.pack(padx=10, pady=2, fill='x')
         self.attacker_crack_button = ttk.Button(attacker_frame, text="Try to Decrypt with Guessed Key", command=self.attacker_decrypt_attempt, state="disabled")
         self.attacker_crack_button.pack(pady=5)
         self.attacker_result_value = tk.StringVar()
         ttk.Label(attacker_frame, text="Decryption Result:").pack(anchor="w", padx=10)
-        ttk.Entry(attacker_frame, textvariable=self.attacker_result_value, state="readonly", width=80).pack(padx=10, pady=(2, 10))
+        ttk.Entry(attacker_frame, textvariable=self.attacker_result_value, state="readonly", width=80).pack(padx=10, pady=(2, 10), fill='x')
 
     def start_generate_p_and_g_thread(self):
         self.generate_pg_button.config(state="disabled", text="Generating...")
@@ -168,7 +211,7 @@ class ElGamalGUI(tk.Tk):
     def generate_p_and_g(self, bits):
         try:
             p = generate_large_prime(bits)
-            g = find_primitive_root(p)
+            g = 2
             self.after(0, self.update_p_g_ui, p, g)
         except Exception as e:
             self.after(0, self.generation_failed, e)
