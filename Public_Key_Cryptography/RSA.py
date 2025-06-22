@@ -303,7 +303,7 @@ class RsaGUI(tk.Tk):
         self.n_label.config(text="Modulus n (p*q):")
         self.phi_label.config(text="Phi(n) (p-1)*(q-1): (secret)")
         self.e_label.config(text="Public Exponent (e):")
-        self.d_label.config(text="Private Exponent (d): (secret)")
+        self.d_label.config(text="Private Exponent (d): (secret)")E
         self.message_entry.delete(0, tk.END)
         self.decrypted_value.set("")
         for widget in [self.ciphertext_text, self.attacker_ciphertext_text]:
